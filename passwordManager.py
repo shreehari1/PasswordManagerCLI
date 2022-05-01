@@ -50,8 +50,8 @@ class PasswordManager:
                 PasswordManager.MASTER_PASSWORD = newSecretKey
                 pwdList= list(PasswordManager.pwd.keys())
                 if len(pwdList) != 0:
-                    self.reEncryptAll(newSecretKey,newSecretSalt)
-                # call method re-encrpt all the stored passwords with new password
+                    # call method re-encrpt all the stored passwords with new password
+                    self.reEncryptAll(newSecretKey,newSecretSalt)                
                 secretKeyHash = self.getHashPassword(newSecretKey)
                 self.updateSecrets(PasswordManager.SECRET_KEY_VAR,secretKeyHash)
                 self.updateSecrets(PasswordManager.SECRET_SALT_VAR,str(binascii.hexlify(newSecretSalt),"ascii"))
@@ -139,7 +139,7 @@ class PasswordManager:
         if option == "-h":
             self.getOptions()
         elif option == "-v":
-            print(emojize(":gear:  Version 0.1.0"))
+            print(emojize(":gear:  Version 1.0.0"))
         elif self.verifyCredentials():
             if option == "-e":
                 self.editApps(app)
@@ -164,11 +164,11 @@ class PasswordManager:
             print(emojize(":blue_book: Use [-h] argument for usage information"))
 
     def getOptions(self):
-        print(emojize("Credential manager CLI :locked_with_key:"))
+        print(emojize("Password Manager CLI :locked_with_key:"))
         print(emojize("Usage:hammer_and_wrench: :"))
-        print("credManagerCLI [AppName] \t\t Copy password of Application")
-        print("credManagerCLI [arguments] [AppName] \t With arguements modify Application specific entry")
-        print("credManagerCLI [arguments] \t\t With arguements modify multiple Application entries")
+        print("pmcli [AppName] \t\t Copy password of Application")
+        print("pmcli [arguments] [AppName] \t With arguements modify Application specific entry")
+        print("pmcli [arguments] \t\t With arguements modify multiple Application entries")
         print()
         print(emojize("Arguements:wrench::"))
         print("  -M \t\t Change [Master Password]")
@@ -184,6 +184,7 @@ class PasswordManager:
         print()
         print("Use simple and short Application names for ease of use")
         print("Use [-l] arguement to view all the Application entries")
+        print()
 
     def reEncryptAll(self,newSecretKey,newSecretSalt):
         for app in PasswordManager.pwd.keys():
@@ -233,11 +234,6 @@ class PasswordManager:
         f = open(PasswordManager.DATA_FILE,"wb")
         f.write(enc)
         f.close()
-
-    # def printDecodedData(self):
-    #     print("Data : "+ str(PasswordManager.data))
-    #     print("Secrets : "+ str(PasswordManager.secrets))
-    #     print("Passwords : "+ str(PasswordManager.pwd))
     
     def __del__(self):
         self.encodeData()
@@ -253,5 +249,4 @@ else:
     print(emojize(":cross_mark: Missing/Incorrect arguements"))
     print(emojize(":blue_book: Use [-h] argument for usage information"))
 
-# cred.printDecodedData()
 del cred
