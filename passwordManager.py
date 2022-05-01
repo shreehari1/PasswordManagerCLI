@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import ossaudiodev
+import binascii,os
 import sys
 import clipboard
 import json
@@ -10,40 +10,51 @@ from getpass import getpass
 from os.path import exists
 from hashlib import sha256
 from base64 import b64encode, b64decode
+from Crypto.Cipher import AES
+from pbkdf2 import PBKDF2
 
-class CredManager:
+class PasswordManager:
 
     DATA_FILE = "data"
-    MASTER_PASSWORD = "masterPassword"
+    SECRET_KEY_VAR = "secretKey"
+    SECRET_SALT_VAR = "secretSalt"
+    MASTER_PASSWORD = ""
     secrets = ""
     pwd = ""
     data = ""
 
     def __init__(self):
-        if exists(CredManager.DATA_FILE) == True:
-            CredManager.data = self.decodeData()
+        if exists(PasswordManager.DATA_FILE) == True:
+            PasswordManager.data = self.decodeData()
             self.parseData()
         else:
             self.initialSetup()
        
     def initialSetup(self):
-        CredManager.data ={"secrets": {}, "passwords": {}}
+        PasswordManager.data ={"secrets": {}, "passwords": {}}
         self.parseData()
         self.generateSecrets()
-        self.addingPasswords()
+        self.addApps()
         exit()
 
     def parseData(self):        
-        CredManager.secrets = CredManager.data["secrets"]
-        CredManager.pwd = CredManager.data["passwords"]
+        PasswordManager.secrets = PasswordManager.data["secrets"]
+        PasswordManager.pwd = PasswordManager.data["passwords"]
 
     def generateSecrets(self):
         while(1):
-            masterPassword = getpass(emojize(":key: Enter [MASTER password]: "))
-            repeat = getpass(emojize(":key: Confirm [MASTER password]: "))
-            if masterPassword == repeat:
-                secretKeyHash = self.getHashPassword(masterPassword)
-                self.updateSecrets(CredManager.MASTER_PASSWORD,secretKeyHash)
+            newSecretKey = getpass(emojize(":key: Enter [MASTER password]: "))
+            repeatNewSecretKey = getpass(emojize(":key: Confirm [MASTER password]: "))
+            if newSecretKey == repeatNewSecretKey:
+                newSecretSalt = os.urandom(16)
+                PasswordManager.MASTER_PASSWORD = newSecretKey
+                pwdList= list(PasswordManager.pwd.keys())
+                if len(pwdList) != 0:
+                    self.reEncryptAll(newSecretKey,newSecretSalt)
+                # call method re-encrpt all the stored passwords with new password
+                secretKeyHash = self.getHashPassword(newSecretKey)
+                self.updateSecrets(PasswordManager.SECRET_KEY_VAR,secretKeyHash)
+                self.updateSecrets(PasswordManager.SECRET_SALT_VAR,str(binascii.hexlify(newSecretSalt),"ascii"))
                 print(emojize(":locked_with_key: [Master password] setup complete"))
                 break
             else:
@@ -51,8 +62,8 @@ class CredManager:
             
 
     def verifyCredentials(self):
-        passwd = getpass(emojize(":key: [MASTER password]: "))
-        if self.getHashPassword(passwd) == CredManager.secrets[CredManager.MASTER_PASSWORD]:
+        PasswordManager.MASTER_PASSWORD = getpass(emojize(":key: [MASTER password]: "))
+        if self.getHashPassword(PasswordManager.MASTER_PASSWORD) == PasswordManager.secrets[PasswordManager.SECRET_KEY_VAR]:
             return True
         else:
             print(emojize(":cross_mark:  Password incorrect try again!"))
@@ -62,20 +73,21 @@ class CredManager:
         return sha256(masterPassword.encode()).hexdigest()
 
     def updateSecrets(self,secretKey,secretValue):
-        CredManager.secrets[secretKey] = secretValue
+        PasswordManager.secrets[secretKey] = secretValue
 
     def updatePassword(self,app,password):
-        CredManager.pwd[app]=password
-        print(emojize(":check_box_with_check:  Password is set for "+ app))
+        PasswordManager.pwd[app]=password
+        print(emojize(":check_box_with_check:  Password set for "+ app))
 
     def addPassword(self,app):
-        if app not in CredManager.pwd:
+        if app not in PasswordManager.pwd:
             password = getpass("Enter the password for "+app+" : ")
-            self.updatePassword(app,password)
+            encryptedPassword=self.encrypt(password)
+            self.updatePassword(app,encryptedPassword)
         else:
             print(emojize(":warning:  Password already exists for this Application!"))
 
-    def addingPasswords(self,app=None):
+    def addApps(self,app=None):
         if app:
             self.addPassword(app)
         else:
@@ -84,14 +96,15 @@ class CredManager:
                 self.addPassword(app)
 
     def editPassword(self,app):
-        if app in CredManager.pwd:
+        if app in PasswordManager.pwd:
             password = getpass("Enter the password for "+app+" : ")
-            self.updatePassword(app,password)
+            encryptedPassword=self.encrypt(password)
+            self.updatePassword(app,encryptedPassword)
         else:
             print(emojize(":warning:  Password entry of this Application doesn't exist!"))
 
 
-    def editingPasswords(self,app=None):
+    def editApps(self,app=None):
         if app:
             self.editPassword(app)
         else:
@@ -100,12 +113,12 @@ class CredManager:
                 self.editPassword(app)
 
     def deletePassword(self,app):
-        if app in CredManager.pwd:
-            del CredManager.pwd[app]
+        if app in PasswordManager.pwd:
+            del PasswordManager.pwd[app]
         else:
             print(emojize(":warning:  Password entry of this Application doesn't exist!"))
 
-    def deletingPasswords(self,app=None):
+    def deleteApps(self,app=None):
         if app:
             self.deletePassword(app)
         else:
@@ -114,7 +127,7 @@ class CredManager:
                 self.deletePassword(app)
 
     def listApps(self):
-        pwdList= list(CredManager.pwd.keys())
+        pwdList= list(PasswordManager.pwd.keys())
         if len(pwdList) == 0:
             print(emojize(":warning:  No entries found!"))
         else: 
@@ -129,11 +142,11 @@ class CredManager:
             print(emojize(":gear:  Version 0.1.0"))
         elif self.verifyCredentials():
             if option == "-e":
-                self.editingPasswords(app)
+                self.editApps(app)
             elif option == "-d":
-                self.deletingPasswords(app)
+                self.deleteApps(app)
             elif option == "-a":
-                self.addingPasswords(app)
+                self.addApps(app)
             elif option == "-l":
                 self.listApps()
             elif option == "-M":
@@ -143,8 +156,8 @@ class CredManager:
             
 
     def getPassword(self,app):
-        if app in CredManager.pwd:
-            clipboard.copy(CredManager.pwd[app])
+        if app in PasswordManager.pwd:
+            clipboard.copy(self.decrypt(app))
             print(emojize(":check_mark_button: "+app+" password copied!"))
         else:
             print(emojize(":warning:  Incorrect arguements"))
@@ -172,8 +185,43 @@ class CredManager:
         print("Use simple and short Application names for ease of use")
         print("Use [-l] arguement to view all the Application entries")
 
+    def reEncryptAll(self,newSecretKey,newSecretSalt):
+        for app in PasswordManager.pwd.keys():
+            password = self.decrypt(app)
+            encryptedPassword =self.encryptWithNewSecrets(password,newSecretKey,newSecretSalt)
+            self.updatePassword(app,encryptedPassword)
+
+    def encryptWithNewSecrets(self,passwordToEncrypt,newSecretKey,newSecretSalt):
+        secretKey = PBKDF2(newSecretKey,newSecretSalt).read(32)
+        encryptedPassword = self.encrypt_AES_GCM(passwordToEncrypt,secretKey)
+        return encryptedPassword
+
+    def encrypt(self,passwordToEncrypt):
+        secretKey = PBKDF2(PasswordManager.MASTER_PASSWORD, binascii.unhexlify(bytes(PasswordManager.secrets[PasswordManager.SECRET_SALT_VAR],"ascii"))).read(32)
+        encryptedPassword = self.encrypt_AES_GCM(passwordToEncrypt,secretKey)
+        return encryptedPassword
+
+
+    def decrypt(self,app):
+        secretKey = PBKDF2(PasswordManager.MASTER_PASSWORD, binascii.unhexlify(bytes(PasswordManager.secrets[PasswordManager.SECRET_SALT_VAR],"ascii"))).read(32)
+        encryptedPassword=PasswordManager.pwd[app]
+        password = self.decrypt_AES_GCM(encryptedPassword,secretKey)
+        return password
+
+
+    def encrypt_AES_GCM(self,password, secretKey):
+        aesCipher = AES.new(secretKey, AES.MODE_GCM)
+        ciphertext, authTag = aesCipher.encrypt_and_digest(bytes(password,"utf-8"))
+        return (str(binascii.hexlify(ciphertext),"ascii"), str(binascii.hexlify(aesCipher.nonce),"ascii"), str(binascii.hexlify(authTag),"ascii"))
+
+    def decrypt_AES_GCM(self,encryptedPassword, secretKey):
+        (ciphertext, nonce, authTag) = encryptedPassword
+        aesCipher = AES.new(secretKey, AES.MODE_GCM, binascii.unhexlify(bytes(nonce,"ascii")))
+        password = aesCipher.decrypt_and_verify(binascii.unhexlify(bytes(ciphertext,"ascii")), binascii.unhexlify(bytes(authTag,"ascii")))
+        return password.decode("utf-8")
+
     def decodeData(self):
-        f= open(CredManager.DATA_FILE,"rb")
+        f= open(PasswordManager.DATA_FILE,"rb")
         s = f.read()
         f.close()
         dec = b64decode(s).decode("utf-8")
@@ -181,21 +229,21 @@ class CredManager:
         return data
 
     def encodeData(self):
-        enc = b64encode(json.dumps(CredManager.data).encode("utf-8"))
-        f = open(CredManager.DATA_FILE,"wb")
+        enc = b64encode(json.dumps(PasswordManager.data).encode("utf-8"))
+        f = open(PasswordManager.DATA_FILE,"wb")
         f.write(enc)
         f.close()
 
     # def printDecodedData(self):
-    #     print("Data : "+ str(CredManager.data))
-    #     print("Secrets : "+ str(CredManager.secrets))
-    #     print("Passwords : "+ str(CredManager.pwd))
+    #     print("Data : "+ str(PasswordManager.data))
+    #     print("Secrets : "+ str(PasswordManager.secrets))
+    #     print("Passwords : "+ str(PasswordManager.pwd))
     
     def __del__(self):
         self.encodeData()
 
 
-cred = CredManager()
+cred = PasswordManager()
 
 if len(sys.argv) == 2:
     cred.arguments(str(sys.argv[1]))
